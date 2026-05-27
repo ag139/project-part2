@@ -1,0 +1,44 @@
+- name: Create backend app
+  copy:
+    dest: /home/ec2-user/app/app.py
+    content: |
+      from flask import Flask
+      app = Flask(__name__)
+
+      @app.route("/")
+      def home():
+          return "Backend running"
+
+      if __name__ == "__main__":
+          app.run(host="0.0.0.0", port=5000)
+
+- name: Create systemd service
+  copy:
+    dest: /etc/systemd/system/backend.service
+    content: |
+      [Unit]
+      Description=Backend Service
+      After=network.target
+
+      [Service]
+      WorkingDirectory=/home/ec2-user/app
+      ExecStart=/usr/bin/python3 app.py
+      Restart=always
+      User=ec2-user
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Enable backend service
+  systemd:
+    name: backend
+    enabled: yes
+
+- name: Start backend service
+  systemd:
+    name: backend
+    state: started

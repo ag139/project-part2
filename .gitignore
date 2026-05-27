@@ -1,0 +1,18 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+
+# AWS CLI zip
+*.zip
+
+# sensitive
+*.pem
+
+.terraform/
+*.zip
+.terraform/
+*.zip
+.tfstate
+.terraform.lock.hcl
