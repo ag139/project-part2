@@ -16,3 +16,5 @@ crash.log
 *.zip
 .tfstate
 .terraform.lock.hcl
+terraform.tfvars
+*.pem
