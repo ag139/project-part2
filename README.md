@@ -1,174 +1,109 @@
-# DevOps Project - Part 2  
-# AWS Infrastructure Automation with Terraform and Ansible
+DevOps Project - Part 2
+AWS Infrastructure Automation with Terraform and Ansible
 
-## Overview
+Overview
+This project demonstrates AWS infrastructure automation using Terraform for infrastructure provisioning and Ansible for configuration management.
 
-This project demonstrates a fully automated cloud-based application environment deployed on AWS using:
+The project simulates a multi-tier environment with separated services and automated deployment.
 
-- Terraform for Infrastructure as Code
-- Ansible for Configuration Management
+Architecture
 
-The project simulates a production-style environment with separated services and automated deployment.
+User → Frontend (NGINX - EC2) → Backend (Flask API - EC2)
+Backend → RDS PostgreSQL
+Backend → S3 Bucket
+Backend → SNS Topic
+Worker → Background processing service (EC2)
 
-The infrastructure and server configuration are created automatically without manual setup.
+Architecture Components
 
----
+Component | Type | Purpose
+Frontend | EC2 + NGINX | HTTP entry point
+Backend | EC2 + Flask | API service
+Worker | EC2 | Background tasks
+RDS | PostgreSQL | Database
+S3 | AWS S3 | File storage
+SNS | AWS SNS | Notifications
+Terraform | IaC | Infrastructure provisioning
+Ansible | Automation | Configuration management
 
-# Architecture
+Data Flow
 
-User
- |
- v
-Frontend (NGINX - EC2)
- |
- v
-Backend (Flask API - EC2)
- |
- +--> RDS PostgreSQL
- |
- +--> S3 Bucket
- |
- +--> SNS Topic
- |
- v
-Worker Service (EC2)
+User sends request to frontend (NGINX)
+Frontend forwards request to backend service
+Backend communicates with RDS PostgreSQL
+Backend uses S3 for file storage
+Backend sends notifications via SNS
+Worker performs background processing tasks
 
----
+Terraform Responsibilities
 
-# Architecture Components
+Terraform provisions:
+VPC (basic configuration)
+Public subnet for frontend
+Private subnets for backend and worker
+EC2 instances for frontend, backend and worker
+Security groups
+RDS PostgreSQL database
+S3 bucket
+SNS topic
 
-| Component | Type | Purpose |
-|---|---|---|
-| Frontend | EC2 + NGINX | Reverse proxy and HTTP access |
-| Backend | EC2 + Flask | API service and AWS integrations |
-| Worker | EC2 | Background processing tasks |
-| RDS | PostgreSQL | Database storage |
-| S3 | AWS S3 | File storage |
-| SNS | AWS SNS | Email notifications |
-| Terraform | Infrastructure as Code | Infrastructure provisioning |
-| Ansible | Automation | Server configuration |
+Terraform Commands
 
----
-
-# Data Flow
-
-1. User sends HTTP request to the frontend server.
-2. NGINX forwards traffic to the backend Flask application.
-3. Backend service:
-   - Reads and writes data to PostgreSQL
-   - Uploads files to S3
-   - Sends notifications using SNS
-4. Worker service performs background processing tasks.
-
----
-
-# Terraform Responsibilities
-
-Terraform automatically creates:
-
-- VPC
-- Public and private subnets
-- Internet Gateway
-- Route Tables
-- Security Groups
-- EC2 Instances
-- RDS PostgreSQL Database
-- S3 Bucket
-- SNS Topic
-- IAM Roles and Policies
-
----
-
-# Terraform Commands
-
-Initialize Terraform:
-
-```bash
 terraform init
-
-Review execution plan:
-
 terraform plan
-
-Create infrastructure:
-
 terraform apply
-
-Destroy infrastructure:
-
 terraform destroy
-Terraform State Management
 
-Terraform state is managed locally using the terraform.tfstate file.
+Terraform State
 
-The state file stores:
+Terraform state is stored locally in terraform.tfstate
 
-Infrastructure resource mappings
-Resource IDs
-Current infrastructure state
+Sensitive state files are excluded from GitHub using .gitignore
 
-The .tfstate files are excluded from GitHub using .gitignore because they may contain sensitive information.
+A sample configuration file is provided in terraform.tfvars.example
 
 Ansible Responsibilities
 
-Ansible automatically configures all EC2 instances after Terraform deployment.
+Ansible configures EC2 instances after Terraform provisioning
 
 Ansible Roles
-Role	Purpose
-common	Common server configuration
-nginx	Install and configure NGINX
-backend	Deploy Flask backend application
-worker	Configure worker service
-Ansible Playbook
-- hosts: all
-  become: yes
-  roles:
-    - common
 
-- hosts: frontend
-  become: yes
-  roles:
-    - nginx
+Role | Purpose
+common | System updates
+nginx | Install and configure NGINX
+backend | Deploy Flask backend
+worker | Configure worker service
 
-- hosts: backend
-  become: yes
-  roles:
-    - backend
-
-- hosts: worker
-  become: yes
-  roles:
-    - worker
 Ansible Inventory
+
 [frontend]
 <FRONTEND_PUBLIC_IP>
 
 [backend]
-<BACKEND_PUBLIC_IP>
+<BACKEND_PRIVATE_IP>
 
 [worker]
-<WORKER_PUBLIC_IP>
+<WORKER_PRIVATE_IP>
+
 Run Ansible
+
 ansible-playbook -i inventory.ini playbook.yml
+
 Backend Service
 
-The backend service is a Flask application that:
+The backend is a Flask application that exposes REST API endpoints, communicates with PostgreSQL, uses S3 for file storage and sends notifications via SNS
 
-Exposes REST API endpoints
-Stores data in PostgreSQL
-Uploads files to S3
-Sends notifications using SNS
 Backend API Endpoints
-Method	Endpoint	Description
-GET	/	Health check
-GET	/users	Get users
-POST	/add_user	Add user
-POST	/upload	Upload file
+
+Method | Endpoint | Description
+GET | / | Health check
+GET | /users | Get users
+POST | /add_user | Add user
+POST | /upload | Upload file
+
 NGINX Reverse Proxy
 
-NGINX runs on the frontend EC2 instance and forwards requests to the backend server.
-
-Example configuration:
+NGINX runs on the frontend EC2 instance and forwards requests to the backend service
 
 server {
     listen 80;
@@ -177,93 +112,53 @@ server {
         proxy_pass http://<BACKEND_PRIVATE_IP>:5000;
     }
 }
+
 Security Groups
 
-Security Groups were configured using least privilege access.
+Frontend Security Group allows HTTP access from the internet and SSH for management
+Backend Security Group allows port 5000 only from frontend and SSH from frontend
+Worker Security Group allows SSH from frontend only
 
-Frontend Security Group
-Allow HTTP (80) from 0.0.0.0/0
-Allow SSH (22) only when required
-Backend Security Group
-Allow port 5000 only from frontend security group
-Allow outbound access to RDS, S3, SNS
-RDS Security Group
-Allow PostgreSQL port 5432 only from backend and worker instances
 Variables
 
-Terraform variables are used for:
-
-AWS region
-EC2 instance types
-Database configuration
-Key pair name
-VPC CIDR ranges
-
-Sensitive values are not stored in GitHub.
+Terraform variables include AWS region, instance types, database configuration, key pair name and S3 bucket name
 
 Secrets Management
 
-Secrets and sensitive values are excluded from the repository.
-
-Examples:
-
-Database password
-RDS endpoint
-SNS topic ARN
-PEM private keys
-
-Sensitive values are replaced with placeholders such as:
-
+Sensitive values are excluded from GitHub and replaced with placeholders:
 <DB_PASSWORD>
 <RDS_ENDPOINT>
 <SNS_TOPIC_ARN>
+
 Testing
-Verify Terraform Infrastructure
+
 terraform output
-Verify Ansible Deployment
 ansible-playbook -i inventory.ini playbook.yml
-Test HTTP Access
 curl http://<FRONTEND_PUBLIC_IP>
-Test Backend API
 curl http://<FRONTEND_PUBLIC_IP>/users
-Add User
-curl -X POST \
--H "Content-Type: application/json" \
--d '{"name":"Alice"}' \
-http://<FRONTEND_PUBLIC_IP>/add_user
+
 Cleanup
 
-Destroy all AWS resources:
-
 terraform destroy
+
 Challenges and Solutions
-Challenge
 
-Managing communication between multiple services across EC2 instances.
+Challenge: Service communication between EC2 instances
+Solution: Security groups and private networking
 
-Solution
+Challenge: Infrastructure automation
+Solution: Separation between Terraform and Ansible
 
-Used Security Groups and private networking for controlled communication.
-
-Challenge
-
-Automating infrastructure and application deployment.
-
-Solution
-
-Separated responsibilities:
-
-Terraform for infrastructure provisioning
-Ansible for server configuration and application deployment
 Best Practices
-Infrastructure as Code using Terraform
-Configuration management using Ansible
-Separation of infrastructure and application layers
-Least privilege IAM permissions
-Security Group isolation
-Automated deployment workflow
+
+Infrastructure as Code with Terraform
+Configuration management with Ansible
+Separation of services into tiers
 Secrets excluded from GitHub
+Modular Ansible roles
+
 Technologies Used
+
 AWS EC2
 AWS RDS PostgreSQL
 AWS S3
@@ -275,22 +170,26 @@ Flask
 NGINX
 Linux
 GitHub
+
 Repository Structure
+
 project-part2/
-│
-├── terraform/
-│   ├── provider.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   ├── main.tf
-│
-├── ansible/
-│   ├── inventory.ini
-│   ├── playbook.yml
-│   └── roles/
-│       ├── common/
-│       ├── nginx/
-│       ├── backend/
-│       └── worker/
-│
-├── README.md
+terraform/
+provider.tf
+variables.tf
+outputs.tf
+ec2.tf
+networking.tf
+security.tf
+rds.tf
+s3.tf
+sns.tf
+
+ansible/
+inventory.ini
+playbook.yml
+roles/
+common
+nginx
+backend
+worker
