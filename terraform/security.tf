@@ -1,8 +1,5 @@
-
-
-# Frontend SG
 resource "aws_security_group" "frontend_sg" {
-  vpc_id = data.aws_vpc.default.id
+  vpc_id = aws_vpc.main.id
 
   ingress {
     from_port   = 80
@@ -26,9 +23,8 @@ resource "aws_security_group" "frontend_sg" {
   }
 }
 
-# Backend SG
 resource "aws_security_group" "backend_sg" {
-  vpc_id = data.aws_vpc.default.id
+  vpc_id = aws_vpc.main.id
 
   ingress {
     from_port       = 5000
@@ -38,10 +34,10 @@ resource "aws_security_group" "backend_sg" {
   }
 
   ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.frontend_sg.id]
   }
 
   egress {
@@ -52,15 +48,14 @@ resource "aws_security_group" "backend_sg" {
   }
 }
 
-# RDS SG
-resource "aws_security_group" "rds_sg" {
-  vpc_id = data.aws_vpc.default.id
+resource "aws_security_group" "worker_sg" {
+  vpc_id = aws_vpc.main.id
 
   ingress {
-    from_port       = 5432
-    to_port         = 5432
+    from_port       = 22
+    to_port         = 22
     protocol        = "tcp"
-    security_groups = [aws_security_group.backend_sg.id]
+    security_groups = [aws_security_group.frontend_sg.id]
   }
 
   egress {

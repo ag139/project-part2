@@ -1,31 +1,17 @@
-variable "aws_region" {
-  default = "us-east-1"
-}
+variable "aws_region" {}
 
-variable "instance_type" {
-  default = "t2.micro"
-}
+variable "ami_id" {}
 
-variable "ami_id" {
-  default = "ami-0c02fb55956c7d316"
-}
+variable "instance_type" {}
 
-variable "key_name" {
-  default = "project-key"
-}
+variable "key_name" {}
 
-variable "db_username" {
-  default = "postgres"
-}
+variable "db_username" {}
 
 variable "db_password" {
   sensitive = true
 }
 
-variable "alert_email" {
-  type = string
-}
+variable "bucket_name" {}
 
-variable "bucket_name" {
-  default = "project-app-bucket-12345"
-}
+variable "alert_email" {}
