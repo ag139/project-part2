@@ -12,7 +12,7 @@ resource "aws_security_group" "frontend_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["5.29.19.40/32"]
   }
 
   egress {
@@ -56,6 +56,27 @@ resource "aws_security_group" "worker_sg" {
     to_port         = 22
     protocol        = "tcp"
     security_groups = [aws_security_group.frontend_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "rds_sg" {
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port = 5432
+    to_port   = 5432
+    protocol  = "tcp"
+    security_groups = [
+      aws_security_group.backend_sg.id,
+      aws_security_group.worker_sg.id
+    ]
   }
 
   egress {

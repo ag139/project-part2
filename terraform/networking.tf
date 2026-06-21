@@ -33,6 +33,8 @@ resource "aws_eip" "nat" {
 resource "aws_nat_gateway" "nat" {
   allocation_id = aws_eip.nat.id
   subnet_id     = aws_subnet.public_subnet.id
+
+  depends_on = [aws_internet_gateway.igw]
 }
 
 resource "aws_route_table" "public_rt" {
@@ -44,7 +46,7 @@ resource "aws_route_table" "public_rt" {
   }
 }
 
-resource "aws_route_table_association" "public_assoc" {
+resource "aws_route_table_association" "public" {
   subnet_id      = aws_subnet.public_subnet.id
   route_table_id = aws_route_table.public_rt.id
 }
@@ -56,14 +58,26 @@ resource "aws_route_table" "private_rt" {
     cidr_block     = "0.0.0.0/0"
     nat_gateway_id = aws_nat_gateway.nat.id
   }
+
+  depends_on = [
+    aws_nat_gateway.nat
+  ]
 }
 
-resource "aws_route_table_association" "backend_assoc" {
+resource "aws_route_table_association" "private_backend" {
   subnet_id      = aws_subnet.private_subnet_backend.id
   route_table_id = aws_route_table.private_rt.id
+
+  depends_on = [
+    aws_route_table.private_rt
+  ]
 }
 
-resource "aws_route_table_association" "worker_assoc" {
+resource "aws_route_table_association" "private_worker" {
   subnet_id      = aws_subnet.private_subnet_worker.id
   route_table_id = aws_route_table.private_rt.id
+
+  depends_on = [
+    aws_route_table.private_rt
+  ]
 }
