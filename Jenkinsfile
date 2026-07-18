@@ -26,37 +26,38 @@ pipeline {
             }
         }
 
-        stage('Docker Containers') {
+        stage('Docker Containers') {         
             steps {
                 echo 'Checking running containers'
                 sh 'docker ps'
             }
         }
-    }
-}
 
-stage('Docker Login') {
-    steps {
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'dockerhub',
-                usernameVariable: 'DOCKER_USER',
-                passwordVariable: 'DOCKER_PASS'
-            )
-        ]) {
-            sh '''
-            echo $DOCKER_PASS | docker login \
-            -u $DOCKER_USER \
-            --password-stdin
-            '''
+        stage('Docker Login') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    sh '''
+                    echo $DOCKER_PASS | docker login \
+                    -u $DOCKER_USER \
+                    --password-stdin
+                    '''
+                }
+            }
         }
-    }
-}
 
-stage('Docker Push') {
-    steps {
-        sh '''
-        docker push ayeletgeulayev/project-part2-backend
-        '''
+        stage('Docker Push') {
+            steps {
+                sh '''
+                docker tag project-part2-backend ayeletgeulayev/project-part2-backend
+                docker push ayeletgeulayev/project-part2-backend
+                '''
+            }
+        }
     }
 }
