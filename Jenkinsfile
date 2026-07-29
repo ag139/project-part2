@@ -5,32 +5,39 @@ pipeline {
     }
 
     parameters {
+
         string(
             name: 'REPO_URL',
-            defaultValue: 'https://github.com/ag139/project-part2.git',
+            defaultValue: 'https://github.com/ag139/project-part2',
             description: 'Git repository URL'
         )
 
         string(
             name: 'EMAIL',
             defaultValue: '',
-            description: 'Email address for notifications'
+            description: 'Email address for build notifications'
         )
     }
 
+    environment {
+
+        IMAGE_NAME = 'my-python-app'
+
+        DOCKER_CREDENTIALS = 'dockerhub-creds'
+
+        SONAR_PROJECT_KEY = 'python-project'
+    }
 
     stages {
 
         stage('Checkout') {
             steps {
-                script {
-                    if (!params.REPO_URL?.trim()) {
-                        error("REPO_URL parameter is empty")
-                    }
+                echo "Checking out repository..."
 
-                    git branch: 'main',
-                        url: "${params.REPO_URL}"
-                }
+                git(
+                    branch: 'main',
+                    url: "${params.REPO_URL}"
+                )
             }
         }
 
@@ -38,21 +45,53 @@ pipeline {
         stage('Check Files') {
             steps {
                 sh '''
-                echo "Project files:"
-                ls -la
+                    echo "Project files:"
+                    ls -la
                 '''
+            }
+        }
+
+
+        stage('SonarQube Scan') {
+            steps {
+
+                withSonarQubeEnv('sonarqube') {
+
+                    script {
+
+                        def scannerHome = tool 'sonar-scanner'
+
+                        sh """
+                            echo "Running SonarQube analysis..."
+
+                            ${scannerHome}/bin/sonar-scanner \
+                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                -Dsonar.projectName=${SONAR_PROJECT_KEY} \
+                                -Dsonar.sources=.
+                        """
+                    }
+                }
             }
         }
 
 
         stage('Unit Tests') {
             steps {
+
                 sh '''
-                if find . -name "test_*.py" -o -name "*_test.py" | grep -q .; then
-                    pytest
-                else
-                    echo "No tests found - skipping"
-                fi
+                    echo "Running unit tests..."
+
+                    TEST_FILES=$(find . -type f \\( \
+                        -name "test_*.py" \
+                        -o \
+                        -name "*_test.py" \
+                    \\))
+
+                    if [ -n "$TEST_FILES" ]; then
+                        pytest
+                    else
+                        echo "No tests found - skipping tests"
+                    fi
                 '''
             }
         }
@@ -60,8 +99,11 @@ pipeline {
 
         stage('Python Lint') {
             steps {
+
                 sh '''
-                flake8 . || true
+                    echo "Running Flake8..."
+
+                    flake8 . || true
                 '''
             }
         }
@@ -69,8 +111,13 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
+
                 sh '''
-                docker build -t my-python-app .
+                    echo "Building Docker image..."
+
+                    docker build \
+                        -t ${IMAGE_NAME}:latest \
+                        .
                 '''
             }
         }
@@ -78,8 +125,13 @@ pipeline {
 
         stage('Docker Security Scan') {
             steps {
+
                 sh '''
-                trivy image my-python-app
+                    echo "Running Trivy security scan..."
+
+                    trivy image \
+                        --skip-version-check \
+                        ${IMAGE_NAME}:latest
                 '''
             }
         }
@@ -90,47 +142,100 @@ pipeline {
 
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'dockerhub-creds',
+                        credentialsId: "${DOCKER_CREDENTIALS}",
                         usernameVariable: 'DOCKER_USER',
                         passwordVariable: 'DOCKER_PASS'
                     )
                 ]) {
 
                     sh '''
-                    echo $DOCKER_PASS | docker login \
-                    -u $DOCKER_USER \
-                    --password-stdin
+                        echo "Logging into Docker Hub..."
 
+                        echo "$DOCKER_PASS" | docker login \
+                            --username "$DOCKER_USER" \
+                            --password-stdin
 
-                    docker tag my-python-app \
-                    $DOCKER_USER/my-python-app:latest
+                        echo "Tagging Docker image..."
 
+                        docker tag \
+                            ${IMAGE_NAME}:latest \
+                            ${DOCKER_USER}/${IMAGE_NAME}:latest
 
-                    docker push \
-                    $DOCKER_USER/my-python-app:latest
+                        echo "Pushing Docker image..."
+
+                        docker push \
+                            ${DOCKER_USER}/${IMAGE_NAME}:latest
+
+                        echo "Docker image pushed successfully."
                     '''
                 }
             }
         }
-
     }
 
 
     post {
 
         success {
-            echo "Pipeline completed successfully"
+
+            echo 'Pipeline completed successfully.'
+
+            script {
+
+                if (params.EMAIL?.trim()) {
+
+                    emailext(
+                        to: params.EMAIL,
+                        subject: "Jenkins SUCCESS - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+Pipeline completed successfully.
+
+Repository:
+${params.REPO_URL}
+
+Build Number:
+${env.BUILD_NUMBER}
+
+Result:
+SUCCESS
+"""
+                    )
+                }
+            }
         }
 
 
         failure {
-            echo "Pipeline failed"
+
+            echo 'Pipeline failed.'
+
+            script {
+
+                if (params.EMAIL?.trim()) {
+
+                    emailext(
+                        to: params.EMAIL,
+                        subject: "Jenkins FAILED - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+Pipeline failed.
+
+Repository:
+${params.REPO_URL}
+
+Build Number:
+${env.BUILD_NUMBER}
+
+Result:
+FAILED
+"""
+                    )
+                }
+            }
         }
 
 
         always {
-            echo "Pipeline finished"
+            echo 'Pipeline finished.'
         }
-
     }
 }
