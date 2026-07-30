@@ -1,63 +1,79 @@
 pipeline {
+
     agent {
-        label 'docker-agent'
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: jenkins-agent
+spec:
+  containers:
+  - name: docker
+    image: docker:latest
+    command:
+    - sleep
+    args:
+    - infinity
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+"""
+        }
     }
+
 
     stages {
 
-        stage('Checkout') {
+        stage('Clone') {
             steps {
-                echo 'Getting code from GitHub'
-                checkout scm
+                git branch: 'main',
+                url: 'https://github.com/ag139/project-part2.git'
             }
         }
 
-        stage('Docker Build Backend') {
-            steps {
-                echo 'Building backend image'
-                sh 'docker build -t project-part2-backend .'
-            }
-        }
 
-        stage('Docker Images') {
+        stage('Build Docker Image') {
             steps {
-                echo 'Checking Docker images'
-                sh 'docker images'
-            }
-        }
-
-        stage('Docker Containers') {         
-            steps {
-                echo 'Checking running containers'
-                sh 'docker ps'
-            }
-        }
-
-        stage('Docker Login') {
-            steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'dockerhub',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )
-                ]) {
-                    sh '''
-                    echo $DOCKER_PASS | docker login \
-                    -u $DOCKER_USER \
-                    --password-stdin
-                    '''
+                container('docker') {
+                    sh """
+                    docker build -t my-python-app .
+                    """
                 }
             }
         }
 
-        stage('Docker Push') {
+
+        stage('Push Docker Image') {
             steps {
-                sh '''
-                docker tag project-part2-backend ayeletgeulayev/project-part2-backend
-                docker push ayeletgeulayev/project-part2-backend
-                '''
+                echo "Push image stage"
             }
+        }
+
+
+        stage('Deploy Kubernetes') {
+            steps {
+                sh """
+                kubectl apply -f k8s/
+                """
+            }
+        }
+    }
+
+
+    post {
+        success {
+            echo "Pipeline finished successfully"
+        }
+
+        failure {
+            echo "Pipeline failed"
         }
     }
 }
