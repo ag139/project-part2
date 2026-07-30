@@ -2,16 +2,7 @@ pipeline {
 
     agent {
         kubernetes {
-            yaml """
-apiVersion: v1
-kind: Pod
-metadata:
-  labels:
-pipeline {
-
-    agent {
-        kubernetes {
-            yaml """
+            yaml '''
 apiVersion: v1
 kind: Pod
 metadata:
@@ -33,10 +24,9 @@ spec:
   - name: docker-sock
     hostPath:
       path: /var/run/docker.sock
-"""
+'''
         }
     }
-
 
     stages {
 
@@ -49,7 +39,6 @@ spec:
             }
         }
 
-
         stage('Check Files') {
             steps {
                 sh '''
@@ -58,7 +47,6 @@ spec:
                 '''
             }
         }
-
 
         stage('Build Docker Image') {
             steps {
@@ -71,35 +59,17 @@ spec:
             }
         }
 
-
-        stage('Docker Login') {
-            steps {
-                echo "Docker login stage"
-            }
-        }
-
-
-        stage('Push Docker Image') {
-            steps {
-                echo "Push image stage"
-            }
-        }
-
-
         stage('Deploy Kubernetes') {
             steps {
                 sh '''
-                echo "Deploying application to Kubernetes..."
+                echo "Deploying to Kubernetes..."
                 kubectl apply -f k8s/
                 '''
             }
         }
-
     }
 
-
     post {
-
         success {
             echo "Pipeline finished successfully"
         }
@@ -111,6 +81,5 @@ spec:
         always {
             echo "Pipeline finished."
         }
-
     }
 }
