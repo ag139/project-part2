@@ -7,6 +7,15 @@ apiVersion: v1
 kind: Pod
 metadata:
   labels:
+pipeline {
+
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
     app: jenkins-agent
 spec:
   containers:
@@ -33,8 +42,20 @@ spec:
 
         stage('Clone') {
             steps {
-                git branch: 'main',
-                url: 'https://github.com/ag139/project-part2.git'
+                git(
+                    branch: 'main',
+                    url: 'https://github.com/ag139/project-part2.git'
+                )
+            }
+        }
+
+
+        stage('Check Files') {
+            steps {
+                sh '''
+                echo "Checking project files..."
+                ls -la
+                '''
             }
         }
 
@@ -42,10 +63,18 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-                    sh """
+                    sh '''
+                    echo "Building Docker image..."
                     docker build -t my-python-app .
-                    """
+                    '''
                 }
+            }
+        }
+
+
+        stage('Docker Login') {
+            steps {
+                echo "Docker login stage"
             }
         }
 
@@ -59,15 +88,18 @@ spec:
 
         stage('Deploy Kubernetes') {
             steps {
-                sh """
+                sh '''
+                echo "Deploying application to Kubernetes..."
                 kubectl apply -f k8s/
-                """
+                '''
             }
         }
+
     }
 
 
     post {
+
         success {
             echo "Pipeline finished successfully"
         }
@@ -75,5 +107,10 @@ spec:
         failure {
             echo "Pipeline failed"
         }
+
+        always {
+            echo "Pipeline finished."
+        }
+
     }
 }
