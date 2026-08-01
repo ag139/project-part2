@@ -55,7 +55,7 @@
 
       [Service]
       User=ec2-user
-      WorkingDirectory=/home/ec2-user/app
+      WorkingDirectory=/home/ec1-user/app
       ExecStart=/usr/bin/python3 /home/ec2-user/app/app.py
       Restart=always
 
