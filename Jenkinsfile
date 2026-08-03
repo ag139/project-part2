@@ -19,12 +19,6 @@ spec:
     volumeMounts:
     - name: docker-sock
       mountPath: /var/run/docker.sock
-  - name: kubectl
-    image: alpine/k8s:1.31.0
-    command:
-    - sleep
-    args:
-    - infinity
   volumes:
   - name: docker-sock
     hostPath:
@@ -32,33 +26,32 @@ spec:
 """
         }
     }
+
     parameters {
         string(
             name: 'REPO_URL',
             defaultValue: 'https://github.com/ag139/project-part2',
             description: 'Git repository URL'
         )
-        string(
-            name: 'EMAIL',
-            defaultValue: '',
-            description: 'Email address for notifications'
+        booleanParam(
+            name: 'TRIGGER_CD',
+            defaultValue: false,
+            description: 'Trigger the CD job automatically after a successful build'
         )
     }
+
     environment {
-        IMAGE_NAME = 'my-python-app'
-        DOCKER_CREDENTIALS = 'dockerhub-creds'
-        SONAR_PROJECT_KEY = 'python-project'
+        IMAGE_NAME  = 'my-python-app'
+        DOCKER_REPO = 'ayeletgeulayev/my-python-app'
+        CD_JOB_NAME = 'my-python-app-cd'
     }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+    }
+
     stages {
-        stage('Clone') {
-            steps {
-                echo "Cloning repository..."
-                git(
-                    branch: 'main',
-                    url: "${params.REPO_URL}"
-                )
-            }
-        }
+
         stage('Check Files') {
             steps {
                 sh '''
@@ -67,41 +60,21 @@ spec:
                 '''
             }
         }
+
         stage('Build Docker Image') {
             steps {
                 container('docker') {
                     sh '''
-                    echo "Building Docker image..."
-                    docker build -t ${IMAGE_NAME}:latest .
+                    set -e
+                    echo "Building ${IMAGE_NAME}:${BUILD_NUMBER} ..."
+                    docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                    docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
                     '''
                 }
             }
         }
-        stage('Deploy Kubernetes') {
-            steps {
-                container('kubectl') {
-                    sh '''
-                    echo "Deploying application to Kubernetes..."
-                    kubectl apply -f k8s/
-                    kubectl get pods
-                    '''
-                }
-            }
-        }
-    }
-    post {
-        success {
-            echo "Pipeline finished successfully"
-        }
-        failure {
-            echo "Pipeline failed"
-        }
-        always {
-            echo "Pipeline finished."
-        }
-    }
-}
-stage('Push Image') {
+
+        stage('Push Image') {
             steps {
                 container('docker') {
                     withCredentials([usernamePassword(
@@ -112,13 +85,49 @@ stage('Push Image') {
                         sh '''
                         set -e
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker tag my-python-app:latest ayeletgeulayev/my-python-app:${BUILD_NUMBER}
-                        docker tag my-python-app:latest ayeletgeulayev/my-python-app:latest
-                        docker push ayeletgeulayev/my-python-app:${BUILD_NUMBER}
-                        docker push ayeletgeulayev/my-python-app:latest
+
+                        docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${DOCKER_REPO}:${BUILD_NUMBER}
+                        docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${DOCKER_REPO}:latest
+
+                        echo "Pushing ${DOCKER_REPO}:${BUILD_NUMBER} ..."
+                        docker push ${DOCKER_REPO}:${BUILD_NUMBER}
+                        docker push ${DOCKER_REPO}:latest
+
                         docker logout
                         '''
                     }
                 }
             }
         }
+
+        stage('Trigger CD') {
+            when {
+                expression { return params.TRIGGER_CD }
+            }
+            steps {
+                script {
+                    echo "Handing off ${DOCKER_REPO}:${BUILD_NUMBER} to ${CD_JOB_NAME}"
+                    build(
+                        job: env.CD_JOB_NAME,
+                        wait: false,
+                        parameters: [
+                            string(name: 'IMAGE_TAG', value: env.BUILD_NUMBER)
+                        ]
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "CI finished successfully - pushed ${DOCKER_REPO}:${BUILD_NUMBER}"
+        }
+        failure {
+            echo "CI failed"
+        }
+        always {
+            echo "CI pipeline finished."
+        }
+    }
+}
