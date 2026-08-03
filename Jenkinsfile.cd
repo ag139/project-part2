@@ -1,0 +1,173 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: jenkins-agent-cd
+spec:
+  serviceAccountName: jenkins
+  containers:
+  - name: kubectl
+    image: alpine/k8s:1.31.0
+    command:
+    - sleep
+    args:
+    - infinity
+"""
+        }
+    }
+
+    parameters {
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: 'latest',
+            description: 'Image tag to deploy'
+        )
+        booleanParam(
+            name: 'ROLLBACK_ON_FAILURE',
+            defaultValue: true,
+            description: 'Undo the rollout automatically if the deploy fails'
+        )
+    }
+
+    environment {
+        IMAGE_NAME      = 'my-python-app'
+        DEPLOYMENT_NAME = 'my-python-app'
+        NAMESPACE       = 'default'
+        APP_PORT        = '5000'
+        MANIFEST_DIR    = 'k8s'
+    }
+
+    options {
+        timeout(time: 15, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    stages {
+
+        stage('Validate Manifests') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    set -e
+                    echo "Validating manifests in ${MANIFEST_DIR}/ ..."
+                    kubectl apply -f ${MANIFEST_DIR}/ -n ${NAMESPACE} --dry-run=server
+                    echo "Manifests are valid."
+                    '''
+                }
+            }
+        }
+
+        stage('Record Current Version') {
+            steps {
+                container('kubectl') {
+                    script {
+                        env.PREVIOUS_IMAGE = sh(
+                            returnStdout: true,
+                            script: """
+                                kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} \
+                                  -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo NONE
+                            """
+                        ).trim()
+                        echo "Currently deployed image: ${env.PREVIOUS_IMAGE}"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    set -e
+                    echo "Applying manifests..."
+                    kubectl apply -f ${MANIFEST_DIR}/ -n ${NAMESPACE}
+
+                    echo "Setting image to ${IMAGE_NAME}:${IMAGE_TAG} ..."
+                    kubectl set image deployment/${DEPLOYMENT_NAME} \
+                      ${DEPLOYMENT_NAME}=${IMAGE_NAME}:${IMAGE_TAG} \
+                      -n ${NAMESPACE}
+
+                    kubectl annotate deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} \
+                      jenkins/build-number="${BUILD_NUMBER}" \
+                      jenkins/deployed-at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                      --overwrite
+                    '''
+                }
+            }
+        }
+
+        stage('Wait For Rollout') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    set -e
+                    echo "Waiting for rollout to finish..."
+                    kubectl rollout status deployment/${DEPLOYMENT_NAME} \
+                      -n ${NAMESPACE} --timeout=180s
+                    '''
+                }
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    set -e
+                    echo "Pods after deploy:"
+                    kubectl get pods -n ${NAMESPACE} -l app=${DEPLOYMENT_NAME} -o wide
+
+                    echo "Checking the service responds..."
+                    for i in 1 2 3 4 5; do
+                        if curl -sSf --max-time 5 \
+                           "http://${DEPLOYMENT_NAME}-service.${NAMESPACE}.svc.cluster.local:${APP_PORT}/" \
+                           -o /dev/null; then
+                            echo "Smoke test passed."
+                            exit 0
+                        fi
+                        echo "Attempt $i failed, retrying in 5s..."
+                        sleep 5
+                    done
+
+                    echo "Smoke test failed - service did not respond."
+                    exit 1
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            container('kubectl') {
+                script {
+                    if (params.ROLLBACK_ON_FAILURE) {
+                        echo "Deploy failed - rolling back."
+                        sh '''
+                        kubectl rollout undo deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} || true
+                        kubectl rollout status deployment/${DEPLOYMENT_NAME} \
+                          -n ${NAMESPACE} --timeout=120s || true
+                        '''
+                    } else {
+                        echo "Rollback disabled - leaving the cluster as is."
+                    }
+                    sh '''
+                    echo "--- Diagnostics ---"
+                    kubectl get pods -n ${NAMESPACE} -l app=${DEPLOYMENT_NAME}
+                    kubectl describe deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} | tail -30
+                    '''
+                }
+            }
+        }
+        success {
+            echo "Deployed ${IMAGE_NAME}:${params.IMAGE_TAG} successfully."
+        }
+        always {
+            echo "CD pipeline finished."
+        }
+    }
+}
