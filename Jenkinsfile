@@ -101,3 +101,24 @@ spec:
         }
     }
 }
+stage('Push Image') {
+            steps {
+                container('docker') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh '''
+                        set -e
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker tag my-python-app:latest ayeletgeulayev/my-python-app:${BUILD_NUMBER}
+                        docker tag my-python-app:latest ayeletgeulayev/my-python-app:latest
+                        docker push ayeletgeulayev/my-python-app:${BUILD_NUMBER}
+                        docker push ayeletgeulayev/my-python-app:latest
+                        docker logout
+                        '''
+                    }
+                }
+            }
+        }
